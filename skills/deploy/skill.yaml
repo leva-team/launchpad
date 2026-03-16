@@ -1,0 +1,12 @@
+name: deploy
+description: >
+  프로젝트를 현재 EC2 샌드박스에 배포합니다.
+  "배포해", "deploy", "배포" 등의 명령에 반응합니다.
+  {service_name}.adreamer.now 도메인으로 자동 연결됩니다.
+triggers:
+  - "배포해"
+  - "배포"
+  - "deploy"
+  - "서비스 배포"
+  - "프로덕션 배포"
+  - "라이브로 올려"
