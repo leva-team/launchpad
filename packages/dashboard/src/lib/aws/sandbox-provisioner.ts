@@ -682,7 +682,7 @@ export async function listUserSandboxes(userId: string): Promise<{ mine: Sandbox
 // ─── Background Provisioning ───────────────────────────────
 
 async function provisionSandboxBackground(sandbox: Sandbox) {
-  const { sandboxId, userId, name: sandboxName, instanceType } = sandbox;
+  const { sandboxId, userId, slug: sandboxName, instanceType } = sandbox;
   let roleName: string | undefined;
   let instanceId: string | undefined;
   let targetGroupArn: string | undefined;
@@ -764,14 +764,15 @@ export async function createSandbox(
   req: CreateSandboxRequest
 ): Promise<Sandbox> {
   const sandboxId = nanoid(12);
-  const sandboxName = req.name.toLowerCase().replace(/[^a-z0-9-]/g, "-");
+  const slug = req.slug.toLowerCase().replace(/[^a-z0-9-]/g, "");
   const instanceType = req.instanceType ?? DEFAULT_INSTANCE_TYPE;
   const now = new Date().toISOString();
 
   const sandbox: Sandbox = {
     sandboxId,
     userId,
-    name: sandboxName,
+    name: req.name,
+    slug,
     description: req.description ?? "",
     status: "provisioning",
     instanceId: "",
@@ -784,7 +785,7 @@ export async function createSandbox(
     targetGroupArn: undefined,
     listenerRuleArn: undefined,
     visibility: req.visibility ?? "public",
-    sandboxDomain: `${sandboxName}-sandbox.${process.env.SANDBOX_BASE_DOMAIN ?? BASE_DOMAIN}`,
+    sandboxDomain: `${slug}-sandbox.${process.env.SANDBOX_BASE_DOMAIN ?? BASE_DOMAIN}`,
     serviceDomains: [],
     provisioningSteps: PROVISIONING_STEPS.map((s) => ({ ...s })),
     region: config.region,
@@ -871,6 +872,42 @@ export async function controlSandbox(
       );
       break;
   }
+
+  return (await getSandbox(userId, sandboxId))!;
+}
+
+export async function changeSlug(
+  userId: string,
+  sandboxId: string,
+  newSlug: string
+): Promise<Sandbox> {
+  const sandbox = await getSandbox(userId, sandboxId);
+  if (!sandbox) throw new Error(`Sandbox ${sandboxId} not found`);
+
+  const cleanSlug = newSlug.toLowerCase().replace(/[^a-z0-9-]/g, "");
+  const baseDomain = config.sandboxBaseDomain ?? BASE_DOMAIN;
+  const oldDomain = sandbox.sandboxDomain;
+  const newDomain = `${cleanSlug}-sandbox.${baseDomain}`;
+
+  if (sandbox.listenerRuleArn) {
+    const { ModifyRuleCommand } = await import("@aws-sdk/client-elastic-load-balancing-v2");
+    await elbv2Client.send(
+      new ModifyRuleCommand({
+        RuleArn: sandbox.listenerRuleArn,
+        Conditions: [{ Field: "host-header", Values: [newDomain] }],
+      })
+    );
+  }
+
+  if (oldDomain !== newDomain) {
+    await deregisterSandboxDns(oldDomain).catch(() => {});
+    await registerSandboxDns(newDomain).catch(() => {});
+  }
+
+  await updateSandboxStatus(userId, sandboxId, {
+    slug: cleanSlug,
+    sandboxDomain: newDomain,
+  });
 
   return (await getSandbox(userId, sandboxId))!;
 }

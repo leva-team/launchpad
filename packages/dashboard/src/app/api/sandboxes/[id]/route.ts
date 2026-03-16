@@ -60,6 +60,12 @@ export async function PUT(
     const { id } = await params;
     const body: UpdateSandboxRequest = await request.json();
 
+    if (body.action === "change-slug" && body.slug) {
+      const { changeSlug } = await import("@/lib/aws/sandbox-provisioner");
+      const sandbox = await changeSlug(user.userId, id, body.slug);
+      return NextResponse.json({ sandbox });
+    }
+
     if (body.action === "change-visibility" && body.visibility) {
       const { changeVisibility } = await import("@/lib/aws/sandbox-provisioner");
       const sandbox = await changeVisibility(user.userId, id, body.visibility as "public" | "private");

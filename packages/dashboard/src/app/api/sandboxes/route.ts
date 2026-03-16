@@ -66,12 +66,17 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 이름 중복 체크
-    const { mine: existing } = await listUserSandboxes(user.userId);
-    const normalizedName = body.name.toLowerCase().replace(/[^a-z0-9-]/g, "-");
-    if (existing.some((s) => s.name === normalizedName)) {
+    if (!body.slug || !/^[a-z0-9][a-z0-9-]*[a-z0-9]$|^[a-z0-9]$/.test(body.slug)) {
       return NextResponse.json(
-        { error: `Sandbox "${normalizedName}" already exists` },
+        { error: "Slug must be lowercase alphanumeric with hyphens only" },
+        { status: 400 }
+      );
+    }
+
+    const { mine: existing } = await listUserSandboxes(user.userId);
+    if (existing.some((s) => s.slug === body.slug)) {
+      return NextResponse.json(
+        { error: `Sandbox slug "${body.slug}" already exists` },
         { status: 409 }
       );
     }
