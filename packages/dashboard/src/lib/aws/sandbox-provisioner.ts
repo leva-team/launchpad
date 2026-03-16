@@ -77,7 +77,7 @@ const config = {
   region: process.env.AWS_REGION ?? "ap-northeast-2",
   albListenerArn: process.env.ALB_LISTENER_ARN!,
   vpcId: process.env.VPC_ID!,
-  cognitoUserPoolArn: process.env.COGNITO_USER_POOL_ARN ?? "arn:aws:cognito-idp:ap-northeast-2:209479300766:userpool/ap-northeast-2_ptZK4E8wJ",
+  cognitoUserPoolArn: process.env.COGNITO_USER_POOL_ARN!,
   cognitoUserPoolId: process.env.COGNITO_USER_POOL_ID!,
   cognitoClientId: process.env.COGNITO_CLIENT_ID!,
   cognitoDomain: process.env.COGNITO_DOMAIN ?? "launchpad.auth.ap-northeast-2.amazoncognito.com",
@@ -272,7 +272,7 @@ async function launchSandboxInstance(
           MaxCount: 1,
           SubnetId: pickSubnet(),
           IamInstanceProfile: {
-            Arn: `arn:aws:iam::${process.env.AWS_ACCOUNT_ID ?? "209479300766"}:instance-profile/sandbox/${profileName}`,
+            Arn: `arn:aws:iam::${process.env.AWS_ACCOUNT_ID}:instance-profile/sandbox/${profileName}`,
           },
           TagSpecifications: [
             {
