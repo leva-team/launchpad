@@ -194,15 +194,18 @@ export function SandboxDetailClient({ sandbox: initialSandbox }: SandboxDetailCl
           Sandboxes
         </Link>
         <ChevronIcon />
-        <span className="font-medium text-white">{sandbox.name}</span>
+        <span className="font-medium text-white">{sandbox.name || sandbox.slug}</span>
       </div>
 
       <div className="flex items-start justify-between gap-4">
         <div>
           <div className="flex items-center gap-3">
-            <h1 className="text-2xl font-bold text-white">{sandbox.name}</h1>
+            <h1 className="text-2xl font-bold text-white">{sandbox.name || sandbox.slug}</h1>
             <SandboxStatus status={sandbox.status} size="md" />
           </div>
+          {sandbox.slug && (
+            <p className="mt-0.5 font-mono text-xs text-gray-500">{sandbox.slug}</p>
+          )}
           {sandbox.description && (
             <p className="mt-1 text-sm text-gray-400">{sandbox.description}</p>
           )}

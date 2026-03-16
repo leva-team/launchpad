@@ -18,15 +18,35 @@ export function CreateSandboxModal({
   onCreated,
 }: CreateSandboxModalProps) {
   const [name, setName] = useState("");
+  const [slug, setSlug] = useState("");
+  const [slugTouched, setSlugTouched] = useState(false);
   const [description, setDescription] = useState("");
   const [instanceType, setInstanceType] = useState(DEFAULT_INSTANCE_TYPE);
   const [visibility, setVisibility] = useState<"public" | "private">("public");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  function nameToSlug(n: string): string {
+    return n.replace(/[가-힣ㄱ-ㅎㅏ-ㅣ]/g, "").replace(/[^a-zA-Z0-9-]/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "").toLowerCase();
+  }
+
+  const handleNameChange = (val: string) => {
+    setName(val);
+    if (!slugTouched) setSlug(nameToSlug(val));
+  };
+
+  const handleSlugChange = (val: string) => {
+    setSlugTouched(true);
+    setSlug(val.toLowerCase().replace(/[^a-z0-9-]/g, ""));
+  };
+
   const handleSubmit = useCallback(async () => {
     if (!name.trim()) {
       setError("Name is required");
+      return;
+    }
+    if (!slug.trim() || !/^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/.test(slug)) {
+      setError("ID는 영문 소문자, 숫자, 하이픈만 가능합니다.");
       return;
     }
 
@@ -39,6 +59,7 @@ export function CreateSandboxModal({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: name.trim(),
+          slug: slug.trim(),
           description: description.trim() || undefined,
           instanceType,
           visibility,
@@ -52,6 +73,8 @@ export function CreateSandboxModal({
 
       // Reset form
       setName("");
+      setSlug("");
+      setSlugTouched(false);
       setDescription("");
       setInstanceType(DEFAULT_INSTANCE_TYPE);
       setVisibility("public");
@@ -62,7 +85,7 @@ export function CreateSandboxModal({
     } finally {
       setLoading(false);
     }
-  }, [name, description, instanceType, visibility, onCreated, onClose]);
+  }, [name, slug, description, instanceType, visibility, onCreated, onClose]);
 
   const handleClose = useCallback(() => {
     if (!loading) {
@@ -99,14 +122,25 @@ export function CreateSandboxModal({
         )}
 
         <Input
-          label="Name"
-          placeholder="my-sandbox"
+          label="이름"
+          placeholder="내 샌드박스"
           value={name}
-          onChange={(e) => setName(e.target.value)}
-          hint="Lowercase letters, numbers, and hyphens. Max 32 characters."
-          disabled={loading}
-          autoFocus
+          onChange={(e) => handleNameChange(e.target.value)}
+          hint="표시 이름. 한글 사용 가능."
         />
+
+        <div>
+          <Input
+            label="ID"
+            placeholder="my-sandbox"
+            value={slug}
+            onChange={(e) => handleSlugChange(e.target.value)}
+            hint={`도메인: ${slug || "___"}-sandbox.${process.env.NEXT_PUBLIC_SANDBOX_DOMAIN ?? "dev.loiscloud.io"}`}
+          />
+          {slug && !/^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/.test(slug) && (
+            <p className="mt-1 text-xs text-red-400">영문 소문자, 숫자, 하이픈만 가능합니다.</p>
+          )}
+        </div>
 
         <Input
           label="Description"

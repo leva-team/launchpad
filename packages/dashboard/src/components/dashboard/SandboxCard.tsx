@@ -39,8 +39,11 @@ export function SandboxCard({ sandbox, onDeleted, readOnly }: SandboxCardProps) 
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0 flex-1">
             <h3 className="truncate text-base font-semibold text-white group-hover:text-gray-100">
-              {sandbox.name}
+              {sandbox.name || sandbox.slug}
             </h3>
+            {sandbox.slug && sandbox.name !== sandbox.slug && (
+              <p className="truncate text-xs font-mono text-gray-500">{sandbox.slug}</p>
+            )}
             {sandbox.description && (
               <p className="mt-1 truncate text-sm text-gray-400">
                 {sandbox.description}
