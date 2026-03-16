@@ -64,9 +64,9 @@ export function SandboxCard({ sandbox, onDeleted, readOnly }: SandboxCardProps) 
           </div>
         )}
 
-        {sandbox.status === "error" && sandbox.errorMessage && (
+        {sandbox.status === "error" && (
           <div className="mt-4 rounded-md border border-red-500/20 bg-red-500/10 px-3 py-2">
-            <p className="text-xs text-red-400">{sandbox.errorMessage}</p>
+            <p className="text-xs text-red-400">오류가 발생했습니다. 클릭하여 상세 확인</p>
           </div>
         )}
 

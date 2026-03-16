@@ -45,6 +45,8 @@ import {
 } from "@aws-sdk/client-elastic-load-balancing-v2";
 
 import { GetParameterCommand } from "@aws-sdk/client-ssm";
+import { STSClient, AssumeRoleCommand } from "@aws-sdk/client-sts";
+import { Route53Client, ChangeResourceRecordSetsCommand } from "@aws-sdk/client-route-53";
 import { PutCommand, GetCommand, QueryCommand } from "@aws-sdk/lib-dynamodb";
 
 import {
@@ -58,7 +60,7 @@ import {
   SANDBOX_ROLE_PREFIX,
   SANDBOX_INSTANCE_PROFILE_PREFIX,
   BASE_DOMAIN,
-  SANDBOX_SUBDOMAIN,
+
   DDB_KEYS,
   DEFAULT_INSTANCE_TYPE,
   PROVISIONING_STEPS,
@@ -82,7 +84,80 @@ const config = {
   cognitoClientId: process.env.COGNITO_CLIENT_ID!,
   cognitoDomain: process.env.COGNITO_DOMAIN ?? "launchpad.auth.ap-northeast-2.amazoncognito.com",
   cognitoAlbClientId: process.env.COGNITO_ALB_CLIENT_ID!,
+  dnsRoleArn: process.env.DNS_ROLE_ARN,
+  dnsHostedZoneId: process.env.DNS_HOSTED_ZONE_ID,
+  albDnsName: process.env.ALB_DNS_NAME,
+  sandboxBaseDomain: process.env.SANDBOX_BASE_DOMAIN,
 };
+
+// ─── DNS (cross-account Route53) ───────────────────────────
+
+async function getRoute53Client(): Promise<Route53Client | null> {
+  if (!config.dnsRoleArn || !config.dnsHostedZoneId) return null;
+
+  const sts = new STSClient({ region: config.region });
+  const { Credentials } = await sts.send(
+    new AssumeRoleCommand({
+      RoleArn: config.dnsRoleArn,
+      RoleSessionName: "launchpad-dns",
+      DurationSeconds: 900,
+    })
+  );
+  if (!Credentials) return null;
+
+  return new Route53Client({
+    region: "us-east-1",
+    credentials: {
+      accessKeyId: Credentials.AccessKeyId!,
+      secretAccessKey: Credentials.SecretAccessKey!,
+      sessionToken: Credentials.SessionToken!,
+    },
+  });
+}
+
+async function registerSandboxDns(sandboxDomain: string) {
+  const r53 = await getRoute53Client();
+  if (!r53 || !config.albDnsName) return;
+
+  await r53.send(
+    new ChangeResourceRecordSetsCommand({
+      HostedZoneId: config.dnsHostedZoneId,
+      ChangeBatch: {
+        Changes: [{
+          Action: "UPSERT",
+          ResourceRecordSet: {
+            Name: sandboxDomain,
+            Type: "CNAME",
+            TTL: 60,
+            ResourceRecords: [{ Value: config.albDnsName }],
+          },
+        }],
+      },
+    })
+  );
+}
+
+async function deregisterSandboxDns(sandboxDomain: string) {
+  const r53 = await getRoute53Client();
+  if (!r53 || !config.albDnsName) return;
+
+  await r53.send(
+    new ChangeResourceRecordSetsCommand({
+      HostedZoneId: config.dnsHostedZoneId,
+      ChangeBatch: {
+        Changes: [{
+          Action: "DELETE",
+          ResourceRecordSet: {
+            Name: sandboxDomain,
+            Type: "CNAME",
+            TTL: 60,
+            ResourceRecords: [{ Value: config.albDnsName }],
+          },
+        }],
+      },
+    })
+  ).catch(() => {});
+}
 
 // ─── Helpers ───────────────────────────────────────────────
 
@@ -337,7 +412,8 @@ async function createTargetGroupAndRule(
   );
 
   const priority = await getNextRulePriority();
-  const hostHeader = `${sandboxName}.${SANDBOX_SUBDOMAIN}.${BASE_DOMAIN}`;
+  const baseDomain = process.env.SANDBOX_BASE_DOMAIN ?? BASE_DOMAIN;
+  const hostHeader = `${sandboxName}-sandbox.${baseDomain}`;
 
   const callbackUrl = `https://${hostHeader}/oauth2/idpresponse`;
   await addCognitoCallbackUrl(callbackUrl);
@@ -498,6 +574,8 @@ async function updateSandboxStatus(
   const current = await getSandbox(userId, sandboxId);
   if (current) {
     const merged = { ...current, ...updates, updatedAt: new Date().toISOString() };
+    if (updates.errorMessage === undefined && "errorMessage" in updates) delete merged.errorMessage;
+    if (updates.provisioningSteps === undefined && "provisioningSteps" in updates) delete merged.provisioningSteps;
     await saveSandbox(merged);
   }
 }
@@ -633,7 +711,11 @@ async function provisionSandboxBackground(sandbox: Sandbox) {
     const albResult = await createTargetGroupAndRule(sandboxId, sandboxName, instanceId);
     targetGroupArn = albResult.targetGroupArn;
     listenerRuleArn = albResult.listenerRuleArn;
-    await updateStep(userId, sandboxId, "alb_target", "done", `도메인: ${sandboxName}.sandbox.adreamer.now`);
+    const sandboxDomain = `${sandboxName}-sandbox.${config.sandboxBaseDomain ?? BASE_DOMAIN}`;
+    await registerSandboxDns(sandboxDomain).catch((err) =>
+      console.error("DNS registration failed (non-fatal):", err)
+    );
+    await updateStep(userId, sandboxId, "alb_target", "done", `도메인: ${sandboxDomain}`);
 
     await updateStep(userId, sandboxId, "complete", "done", "샌드박스가 준비되었습니다");
 
@@ -702,7 +784,7 @@ export async function createSandbox(
     targetGroupArn: undefined,
     listenerRuleArn: undefined,
     visibility: req.visibility ?? "public",
-    sandboxDomain: `${sandboxName}.${SANDBOX_SUBDOMAIN}.${BASE_DOMAIN}`,
+    sandboxDomain: `${sandboxName}-sandbox.${process.env.SANDBOX_BASE_DOMAIN ?? BASE_DOMAIN}`,
     serviceDomains: [],
     provisioningSteps: PROVISIONING_STEPS.map((s) => ({ ...s })),
     region: config.region,
@@ -746,7 +828,8 @@ export async function terminateSandbox(
   // 3. Cleanup IAM
   await deleteSandboxIamRole(sandboxId);
 
-  // 4. Update DynamoDB
+  await deregisterSandboxDns(sandbox.sandboxDomain).catch(() => {});
+
   await updateSandboxStatus(userId, sandboxId, { status: "terminated" });
 }
 
@@ -758,8 +841,11 @@ export async function controlSandbox(
   const sandbox = await getSandbox(userId, sandboxId);
   if (!sandbox) throw new Error(`Sandbox ${sandboxId} not found`);
 
+  const clearFields = { errorMessage: undefined, provisioningSteps: undefined };
+
   switch (action) {
     case "start":
+      await updateSandboxStatus(userId, sandboxId, { ...clearFields, status: "provisioning" });
       await ec2Client.send(
         new StartInstancesCommand({ InstanceIds: [sandbox.instanceId] })
       );
@@ -771,6 +857,7 @@ export async function controlSandbox(
       break;
 
     case "stop":
+      await updateSandboxStatus(userId, sandboxId, clearFields);
       await ec2Client.send(
         new StopInstancesCommand({ InstanceIds: [sandbox.instanceId] })
       );
@@ -778,6 +865,7 @@ export async function controlSandbox(
       break;
 
     case "reboot":
+      await updateSandboxStatus(userId, sandboxId, clearFields);
       await ec2Client.send(
         new RebootInstancesCommand({ InstanceIds: [sandbox.instanceId] })
       );
@@ -815,6 +903,7 @@ export async function changeInstanceType(
   try {
     await updateSandboxStatus(userId, sandboxId, {
       status: "provisioning",
+      errorMessage: undefined,
       provisioningSteps: [
         { id: "iam_role" as const, label: "인스턴스 중지", status: "in_progress", message: "안전하게 중지 중...", timestamp: new Date().toISOString() },
         { id: "ec2_launch" as const, label: "타입 변경", status: "pending" },

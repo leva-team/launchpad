@@ -4,7 +4,7 @@ import type { Sandbox } from "@launchpad/shared";
 import { cookies } from "next/headers";
 
 async function getSandboxes(): Promise<{ sandboxes: Sandbox[]; shared: Sandbox[] }> {
-  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL ?? "http://localhost:3001";
+  const baseUrl = `http://localhost:${process.env.PORT ?? "3001"}`;
   const cookieStore = await cookies();
   const token = cookieStore.get("id_token")?.value;
 

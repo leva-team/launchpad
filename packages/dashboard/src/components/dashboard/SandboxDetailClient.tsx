@@ -115,6 +115,31 @@ export function SandboxDetailClient({ sandbox: initialSandbox }: SandboxDetailCl
     if (isRunning) refreshStatus();
   }, [isRunning, refreshStatus]);
 
+  useEffect(() => {
+    if (sandbox.status !== "provisioning") return;
+    const id = setInterval(async () => {
+      try {
+        const res = await fetch(`/api/sandboxes/${sandbox.sandboxId}`);
+        if (!res.ok) return;
+        const { sandbox: updated } = await res.json();
+        if (updated) {
+          setSandbox(updated);
+          if (updated.status !== "provisioning") router.refresh();
+        }
+      } catch { /* polling */ }
+    }, 3000);
+    return () => clearInterval(id);
+  }, [sandbox.status, sandbox.sandboxId, router]);
+
+  const refreshSandbox = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/sandboxes/${sandbox.sandboxId}`);
+      if (!res.ok) return;
+      const { sandbox: updated } = await res.json();
+      if (updated) setSandbox(updated);
+    } catch { /* ignore */ }
+  }, [sandbox.sandboxId]);
+
   const handleAction = useCallback(
     async (action: SandboxAction) => {
       setActionLoading(action);
@@ -129,14 +154,14 @@ export function SandboxDetailClient({ sandbox: initialSandbox }: SandboxDetailCl
           alert(data.error ?? `Failed to ${action} sandbox`);
           return;
         }
-        router.refresh();
+        await refreshSandbox();
       } catch {
         alert(`Failed to ${action} sandbox`);
       } finally {
         setActionLoading(null);
       }
     },
-    [sandbox.sandboxId, router]
+    [sandbox.sandboxId, refreshSandbox]
   );
 
   const handleDelete = useCallback(async () => {
@@ -334,7 +359,7 @@ export function SandboxDetailClient({ sandbox: initialSandbox }: SandboxDetailCl
                         headers: { "Content-Type": "application/json" },
                         body: JSON.stringify({ action: "change-instance-type", instanceType: selectedInstanceType }),
                       });
-                      router.refresh();
+                      await refreshSandbox();
                     },
                   })}
                   loading={false}
@@ -442,9 +467,48 @@ export function SandboxDetailClient({ sandbox: initialSandbox }: SandboxDetailCl
       )}
 
       {isTerminal && (
-        <div className="mt-12 flex flex-col items-center justify-center rounded-xl border border-dashed border-gray-800 py-16">
-          <h3 className="text-base font-medium text-gray-300">샌드박스를 사용할 수 없음</h3>
-          <p className="mt-1 text-sm text-gray-500">{sandbox.errorMessage ?? `Status: ${sandbox.status}`}</p>
+        <div className="mt-12 rounded-xl border border-dashed border-gray-800 py-10">
+          <div className="flex flex-col items-center">
+            <h3 className="text-base font-medium text-gray-300">샌드박스를 사용할 수 없음</h3>
+            {sandbox.errorMessage && (
+              <details className="mx-6 mt-4 w-full max-w-2xl">
+                <summary className="cursor-pointer rounded-lg border border-red-500/20 bg-red-500/10 px-4 py-2 text-xs text-red-400 hover:bg-red-500/15">
+                  에러 로그 보기
+                </summary>
+                <pre className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap rounded-lg border border-red-500/20 bg-red-500/10 p-4 text-xs text-red-400">
+                  {sandbox.errorMessage}
+                </pre>
+              </details>
+            )}
+          </div>
+          <div className="mt-6 flex justify-center gap-2">
+            {sandbox.status === "error" && sandbox.instanceId && (
+              <ControlButton
+                onClick={() => setConfirmAction({
+                  label: "인스턴스 시작",
+                  description: "중지된 인스턴스를 다시 시작합니다.",
+                  onConfirm: () => handleAction("start"),
+                })}
+                loading={actionLoading === "start"}
+                disabled={!!actionLoading}
+                color="blue"
+              >
+                <PlayIcon /> 시작
+              </ControlButton>
+            )}
+            <ControlButton
+              onClick={() => setConfirmAction({
+                label: "샌드박스 삭제",
+                description: `"${sandbox.name}"을 영구 삭제합니다.`,
+                onConfirm: handleDelete,
+              })}
+              loading={actionLoading === "delete"}
+              disabled={!!actionLoading}
+              color="red"
+            >
+              <TrashIcon /> 삭제
+            </ControlButton>
+          </div>
         </div>
       )}
 

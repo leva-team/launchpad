@@ -132,6 +132,150 @@ export interface DeployResponse {
   url: string;
 }
 
+// ─── Service ───────────────────────────────────────────────
+
+export type ProjectStage = "concept" | "development" | "staging" | "production" | "deprecated";
+export type FirewallPolicy = "public" | "internal" | "restricted";
+export type DeployStrategy = "blue-green" | "canary-10-5" | "canary-10-15" | "linear-10-1";
+
+export interface SLITarget {
+  metric: string;
+  target: number;
+  unit: string;
+}
+
+export interface Service {
+  serviceId: string;
+  name: string;
+  description: string;
+  purpose: string;
+  ownerUserId: string;
+  ownerName: string;
+  ownerTeam: string;
+  projectStage: ProjectStage;
+  sliTargets: SLITarget[];
+  slaTarget: number;
+  firewallPolicy: FirewallPolicy;
+  architectureLinks: string[];
+  repositoryUrl: string;
+  dockerfilePath: string;
+  ecsConfig: {
+    cpu: number;
+    memory: number;
+    desiredCount: number;
+    port: number;
+  };
+  deployStrategy: DeployStrategy;
+  approverUserIds: string[];
+  linkedSandboxIds: string[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateServiceRequest {
+  name: string;
+  description: string;
+  purpose: string;
+  ownerTeam: string;
+  projectStage?: ProjectStage;
+  firewallPolicy?: FirewallPolicy;
+  repositoryUrl?: string;
+  dockerfilePath?: string;
+  deployStrategy?: DeployStrategy;
+  slaTarget?: number;
+  ecsConfig?: Partial<Service["ecsConfig"]>;
+}
+
+export interface UpdateServiceRequest {
+  name?: string;
+  description?: string;
+  purpose?: string;
+  ownerTeam?: string;
+  projectStage?: ProjectStage;
+  firewallPolicy?: FirewallPolicy;
+  repositoryUrl?: string;
+  dockerfilePath?: string;
+  deployStrategy?: DeployStrategy;
+  slaTarget?: number;
+  sliTargets?: SLITarget[];
+  architectureLinks?: string[];
+  ecsConfig?: Partial<Service["ecsConfig"]>;
+  approverUserIds?: string[];
+}
+
+// ─── Pipeline Deployment ───────────────────────────────────
+
+export type PipelineStatus =
+  | "created"
+  | "building"
+  | "build_failed"
+  | "deploying_stg"
+  | "stg_failed"
+  | "stg_active"
+  | "qa_running"
+  | "qa_failed"
+  | "pending_approval"
+  | "rejected"
+  | "deploying_prd"
+  | "prd_failed"
+  | "ready_for_cutover"
+  | "live"
+  | "rolled_back";
+
+export interface StatusHistoryEntry {
+  status: PipelineStatus;
+  at: string;
+  by?: string;
+  reason?: string;
+}
+
+export interface PipelineDeployment {
+  deployId: string;
+  serviceId: string;
+  version: string;
+  status: PipelineStatus;
+  sandboxId?: string;
+  dockerImageUri: string;
+  environments: {
+    stg?: { taskArn: string; clusterArn: string; deployedAt: string };
+    prd?: { taskArn: string; clusterArn: string; codeDeployId: string; deployedAt: string };
+  };
+  previousDeployId?: string;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+  statusHistory: StatusHistoryEntry[];
+}
+
+export interface Approval {
+  approvalId: string;
+  deployId: string;
+  serviceId: string;
+  serviceName: string;
+  approverUserId: string;
+  status: "pending" | "approved" | "rejected" | "expired";
+  requestedAt: string;
+  respondedAt?: string;
+  comment?: string;
+}
+
+export interface QAResult {
+  qaRunId: string;
+  deployId: string;
+  type: "scenario" | "load" | "smoke";
+  status: "running" | "passed" | "failed";
+  triggeredBy: string;
+  startedAt: string;
+  completedAt?: string;
+  summary?: {
+    totalTests: number;
+    passed: number;
+    failed: number;
+    duration: number;
+  };
+  reportUrl?: string;
+}
+
 // ─── User ──────────────────────────────────────────────────
 
 export interface User {

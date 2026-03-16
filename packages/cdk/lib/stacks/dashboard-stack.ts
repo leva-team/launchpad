@@ -71,6 +71,7 @@ export class DashboardStack extends cdk.Stack {
           "ec2:AllocateAddress", "ec2:AssociateAddress",
           "ec2:ReleaseAddress", "ec2:DisassociateAddress", "ec2:DescribeAddresses",
           "ec2:DescribeLaunchTemplates", "ec2:DescribeLaunchTemplateVersions",
+          "ec2:ModifyInstanceAttribute", "ec2:DescribeInstanceAttribute",
         ],
         resources: ["*"],
       })
