@@ -1,0 +1,27 @@
+{
+  "name": "@launchpad/cdk",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "build": "tsc",
+    "type-check": "tsc --noEmit",
+    "synth": "cdk synth",
+    "deploy": "cdk deploy --all",
+    "deploy:network": "cdk deploy LaunchpadNetwork",
+    "deploy:cognito": "cdk deploy LaunchpadCognito",
+    "deploy:data": "cdk deploy LaunchpadData",
+    "destroy": "cdk destroy --all",
+    "diff": "cdk diff"
+  },
+  "dependencies": {
+    "@launchpad/shared": "*",
+    "aws-cdk-lib": "^2.170.0",
+    "constructs": "^10.4.0"
+  },
+  "devDependencies": {
+    "aws-cdk": "^2.170.0",
+    "ts-node": "^10.9.2",
+    "tsx": "^4.21.0",
+    "typescript": "^5.7.0"
+  }
+}
