@@ -3,11 +3,12 @@
 import { useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import type { Service } from "@launchpad/shared";
+import type { Service, PipelineDeployment } from "@launchpad/shared";
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
 import { StageBadge } from "./ServiceCard";
 import { ServiceForm } from "./ServiceForm";
+import { StatusBadge } from "@/components/deployment/PipelineVisualizer";
 
 interface ServiceDetailClientProps {
   service: Service;
@@ -20,6 +21,22 @@ export function ServiceDetailClient({
   const [service, setService] = useState(initialService);
   const [editOpen, setEditOpen] = useState(false);
   const [deleteLoading, setDeleteLoading] = useState(false);
+  const [deployments, setDeployments] = useState<PipelineDeployment[]>([]);
+  const [deploymentsLoaded, setDeploymentsLoaded] = useState(false);
+  const [newDeployVersion, setNewDeployVersion] = useState("");
+  const [deployModalOpen, setDeployModalOpen] = useState(false);
+  const [deploying, setDeploying] = useState(false);
+
+  const loadDeployments = useCallback(async () => {
+    const res = await fetch(`/api/services/${service.serviceId}/deployments`);
+    if (res.ok) {
+      const data = await res.json();
+      setDeployments(data.deployments ?? []);
+    }
+    setDeploymentsLoaded(true);
+  }, [service.serviceId]);
+
+  useState(() => { loadDeployments(); });
   const [confirmDelete, setConfirmDelete] = useState(false);
 
   const handleDelete = useCallback(async () => {
@@ -213,6 +230,87 @@ export function ServiceDetailClient({
           <span>ID: {service.serviceId}</span>
         </div>
       </div>
+
+      <div className="mt-10 rounded-xl border border-gray-800 bg-gray-950 p-6">
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg font-semibold text-white">Deployments</h2>
+          <button
+            onClick={() => setDeployModalOpen(true)}
+            className="rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-500"
+          >
+            새 배포
+          </button>
+        </div>
+        {!deploymentsLoaded ? (
+          <div className="mt-4 h-20 animate-pulse rounded-lg bg-gray-800/40" />
+        ) : deployments.length === 0 ? (
+          <p className="mt-4 text-sm text-gray-600">배포 기록이 없습니다.</p>
+        ) : (
+          <div className="mt-4 overflow-hidden rounded-lg border border-gray-800">
+            <table className="w-full text-sm">
+              <thead className="bg-gray-900/50 text-xs text-gray-400">
+                <tr>
+                  <th className="px-4 py-2 text-left">Version</th>
+                  <th className="px-4 py-2 text-left">Status</th>
+                  <th className="px-4 py-2 text-left">Created</th>
+                  <th className="px-4 py-2 text-left" />
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-800/50">
+                {deployments.map((d) => (
+                  <tr key={d.deployId}>
+                    <td className="px-4 py-2 font-medium text-white">{d.version}</td>
+                    <td className="px-4 py-2"><StatusBadge status={d.status} /></td>
+                    <td className="px-4 py-2 text-gray-500">{new Date(d.createdAt).toLocaleDateString("ko-KR")}</td>
+                    <td className="px-4 py-2">
+                      <Link href={`/deployments/${d.deployId}`} className="text-xs text-blue-400 hover:text-blue-300">
+                        상세
+                      </Link>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {deployModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={() => setDeployModalOpen(false)}>
+          <div className="w-full max-w-sm rounded-2xl border border-gray-800 bg-gray-950 p-6 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-base font-semibold text-white">새 배포</h3>
+            <input
+              type="text"
+              value={newDeployVersion}
+              onChange={(e) => setNewDeployVersion(e.target.value)}
+              placeholder="버전 (예: 1.0.0 또는 git SHA)"
+              className="mt-3 w-full rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 text-sm text-gray-100 focus:border-blue-500 focus:outline-none"
+            />
+            <div className="mt-4 flex justify-end gap-2">
+              <button onClick={() => setDeployModalOpen(false)} className="rounded-lg px-4 py-2 text-sm text-gray-400 hover:text-white">취소</button>
+              <button
+                disabled={!newDeployVersion.trim() || deploying}
+                onClick={async () => {
+                  setDeploying(true);
+                  const res = await fetch(`/api/services/${service.serviceId}/deployments`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ version: newDeployVersion.trim() }),
+                  });
+                  if (res.ok) {
+                    const { deployment } = await res.json();
+                    router.push(`/deployments/${deployment.deployId}`);
+                  }
+                  setDeploying(false);
+                }}
+                className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-500 disabled:opacity-50"
+              >
+                {deploying ? "생성 중..." : "생성"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Edit Modal */}
       <Modal
