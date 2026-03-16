@@ -38,6 +38,7 @@ export interface Sandbox {
   sandboxId: string;
   userId: string;
   name: string;
+  slug: string;
   description: string;
   status: SandboxStatus;
 
@@ -78,6 +79,7 @@ export interface ServiceDomain {
 
 export interface CreateSandboxRequest {
   name: string;
+  slug: string;
   description?: string;
   instanceType?: string;
   visibility?: SandboxVisibility;
@@ -90,7 +92,8 @@ export interface CreateSandboxResponse {
 export interface UpdateSandboxRequest {
   name?: string;
   description?: string;
-  action?: "start" | "stop" | "reboot" | "change-instance-type" | "change-visibility";
+  action?: "start" | "stop" | "reboot" | "change-instance-type" | "change-visibility" | "change-slug";
+  slug?: string;
   instanceType?: string;
   visibility?: SandboxVisibility;
 }
