@@ -424,7 +424,7 @@ async function createTargetGroupAndRule(
   sandboxName: string,
   instanceId: string
 ): Promise<{ targetGroupArn: string; listenerRuleArn: string }> {
-  const tgName = `lp-${sandboxId.slice(0, 8)}`;
+  const tgName = `lp-${sandboxId.slice(0, 8).replace(/[^A-Za-z0-9-]/g, "x")}`;
 
   const { TargetGroups } = await elbv2Client.send(
     new CreateTargetGroupCommand({
