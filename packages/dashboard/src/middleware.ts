@@ -17,6 +17,9 @@ export function middleware(request: NextRequest) {
 
   const idToken = request.cookies.get("id_token")?.value;
   if (!idToken) {
+    if (pathname.startsWith("/api/")) {
+      return NextResponse.json({ error: "Unauthorized", redirect: "/login" }, { status: 401 });
+    }
     const baseUrl = process.env.NEXTAUTH_URL ?? request.nextUrl.origin;
     const loginUrl = new URL("/login", baseUrl);
     loginUrl.searchParams.set("redirect", pathname);
