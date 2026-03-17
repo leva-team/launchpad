@@ -93,7 +93,11 @@ const config = {
 // ─── DNS (cross-account Route53) ───────────────────────────
 
 async function getRoute53Client(): Promise<Route53Client | null> {
-  if (!config.dnsRoleArn || !config.dnsHostedZoneId) return null;
+  if (!config.dnsHostedZoneId) return null;
+
+  if (!config.dnsRoleArn) {
+    return new Route53Client({ region: "us-east-1" });
+  }
 
   const sts = new STSClient({ region: config.region });
   const { Credentials } = await sts.send(
