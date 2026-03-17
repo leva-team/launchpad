@@ -161,6 +161,44 @@ async function deregisterSandboxDns(sandboxDomain: string) {
 
 // ─── Helpers ───────────────────────────────────────────────
 
+async function waitForSoftwareInit(instanceId: string, maxWaitMs = 420000): Promise<void> {
+  const { SendCommandCommand, GetCommandInvocationCommand } = await import("@aws-sdk/client-ssm");
+  const startTime = Date.now();
+  const pollInterval = 15000;
+
+  while (Date.now() - startTime < maxWaitMs) {
+    await new Promise((r) => setTimeout(r, pollInterval));
+
+    try {
+      const { Command } = await ssmClient.send(
+        new SendCommandCommand({
+          InstanceIds: [instanceId],
+          DocumentName: "AWS-RunShellScript",
+          Parameters: { commands: ["cat /var/log/launchpad-init.log 2>/dev/null || echo NOT_READY"] },
+          TimeoutSeconds: 30,
+        })
+      );
+      if (!Command?.CommandId) continue;
+
+      await new Promise((r) => setTimeout(r, 8000));
+
+      const { StandardOutputContent, Status } = await ssmClient.send(
+        new GetCommandInvocationCommand({
+          CommandId: Command.CommandId,
+          InstanceId: instanceId,
+        })
+      );
+
+      if (Status === "Success" && StandardOutputContent?.includes("Launchpad sandbox ready")) {
+        return;
+      }
+    } catch {
+      continue;
+    }
+  }
+  console.warn(`Software init timeout for ${instanceId} after ${maxWaitMs}ms — proceeding anyway`);
+}
+
 function pickSubnet(): string {
   const idx = Math.floor(Math.random() * config.subnetIds.length);
   return config.subnetIds[idx];
@@ -706,6 +744,10 @@ async function provisionSandboxBackground(sandbox: Sandbox) {
 
     await updateStep(userId, sandboxId, "ec2_running", "in_progress", "인스턴스 부팅 대기 중...");
     await updateStep(userId, sandboxId, "ec2_running", "done", "인스턴스 Running 상태 확인");
+
+    await updateStep(userId, sandboxId, "software_init", "in_progress", "Node.js, OpenCode, OMO 설치 중... (2~5분 소요)");
+    await waitForSoftwareInit(instanceId);
+    await updateStep(userId, sandboxId, "software_init", "done", "OpenCode + OMO 설치 완료");
 
     await updateStep(userId, sandboxId, "alb_target", "in_progress", "ALB 타겟 그룹 및 라우팅 규칙 생성 중...");
     const albResult = await createTargetGroupAndRule(sandboxId, sandboxName, instanceId);

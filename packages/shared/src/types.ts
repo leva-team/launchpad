@@ -13,6 +13,7 @@ export type ProvisioningStepId =
   | "iam_role"
   | "ec2_launch"
   | "ec2_running"
+  | "software_init"
   | "alb_target"
   | "complete";
 
@@ -30,6 +31,7 @@ export const PROVISIONING_STEPS: readonly ProvisioningStep[] = [
   { id: "iam_role", label: "IAM Role 생성", status: "pending" },
   { id: "ec2_launch", label: "EC2 인스턴스 시작", status: "pending" },
   { id: "ec2_running", label: "인스턴스 부팅 대기", status: "pending" },
+  { id: "software_init", label: "소프트웨어 설치", status: "pending" },
   { id: "alb_target", label: "로드밸런서 연결", status: "pending" },
   { id: "complete", label: "준비 완료", status: "pending" },
 ] as const;
