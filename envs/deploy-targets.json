@@ -1,0 +1,14 @@
+{
+  "adreamer": {
+    "profile": "leve-infra-guru",
+    "instanceId": "i-0455cacf46f94c89e",
+    "s3Bucket": "launchpad-dashboard-artifacts-209479300766",
+    "envFile": "adreamer.env"
+  },
+  "ldz-krane-dev": {
+    "profile": "ldz-krane-dev",
+    "instanceId": "i-056f5231e9218dd57",
+    "s3Bucket": "launchpad-dashboard-artifacts-027653366561",
+    "envFile": "ldz-krane-dev.env"
+  }
+}
